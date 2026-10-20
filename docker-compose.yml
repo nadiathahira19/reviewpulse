@@ -3,7 +3,7 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: reviewpulse
-      POSTGRES_PASSWORD: reviewpulse
+      POSTGRES_PASSWORD: reviewpulse  # pragma: allowlist secret
       POSTGRES_DB: reviewpulse
     ports:
       - "5432:5432"
