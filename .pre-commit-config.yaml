@@ -21,7 +21,7 @@ repos:
       - id: mypy
         args: [--config-file=pyproject.toml, api]
         pass_filenames: false
-        additional_dependencies: [fastapi, httpx, pytest, sqlalchemy, alembic]
+        additional_dependencies: [fastapi, httpx, pytest, sqlalchemy, alembic, pyjwt, argon2-cffi]
 
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
