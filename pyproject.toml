@@ -4,6 +4,7 @@ testpaths = ["api/tests"]
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["api/migrations/versions"]
 target-version = "py311"
 src = ["api"]
 
