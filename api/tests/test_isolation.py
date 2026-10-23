@@ -1,3 +1,4 @@
+import os
 import re
 import uuid
 from collections.abc import Iterator
@@ -22,12 +23,18 @@ PUBLIC_PATHS = {"/healthz"}
 
 @pytest.fixture
 def session() -> Iterator[Session]:
-    engine = create_engine(
-        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
-    )
-    Base.metadata.create_all(engine)
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        # Postgres (CI): the schema was already created by `alembic upgrade head`.
+        engine = create_engine(database_url)
+    else:
+        engine = create_engine(
+            "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
+        )
+        Base.metadata.create_all(engine)
     with Session(engine) as db_session:
         yield db_session
+    engine.dispose()
 
 
 @pytest.fixture
@@ -124,3 +131,9 @@ def test_every_route_except_public_ones_requires_credentials(client: TestClient)
             assert response.status_code == 401, (method, route.path)
             checked += 1
     assert checked >= 3
+
+
+def test_isolation_tests_run_on_postgres_when_configured(session: Session) -> None:
+    if not os.environ.get("DATABASE_URL"):
+        pytest.skip("DATABASE_URL is not set, so SQLite is used locally")
+    assert session.get_bind().dialect.name == "postgresql"
