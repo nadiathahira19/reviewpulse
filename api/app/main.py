@@ -9,10 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.analyzer import SentimentAnalyzer, get_analyzer
 from app.db import get_session
+from app.logging_config import configure_logging
 from app.repositories import get_batch, list_batches
+from app.request_logging import request_logging_middleware
 from app.tenancy import CurrentTenant, get_current_tenant
 
 app = FastAPI(title="ReviewPulse", version="0.1.0")
+configure_logging()
+app.middleware("http")(request_logging_middleware)
 
 TenantDep = Annotated[CurrentTenant, Depends(get_current_tenant)]
 SessionDep = Annotated[Session, Depends(get_session)]
