@@ -4,8 +4,10 @@ import uuid
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.analyzer import SentimentAnalyzer, get_analyzer
 from app.db import get_session
 from app.repositories import get_batch, list_batches
 from app.tenancy import CurrentTenant, get_current_tenant
@@ -14,6 +16,24 @@ app = FastAPI(title="ReviewPulse", version="0.1.0")
 
 TenantDep = Annotated[CurrentTenant, Depends(get_current_tenant)]
 SessionDep = Annotated[Session, Depends(get_session)]
+AnalyzerDep = Annotated[SentimentAnalyzer, Depends(get_analyzer)]
+
+ReviewText = Annotated[str, Field(min_length=1, max_length=2000)]
+
+
+class AnalyzeRequest(BaseModel):
+    reviews: list[ReviewText] = Field(min_length=1, max_length=100)
+
+
+class ReviewResult(BaseModel):
+    index: int
+    label: str
+    score: float
+
+
+class AnalyzeResponse(BaseModel):
+    model_version: str
+    results: list[ReviewResult]
 
 
 @app.get("/healthz")
@@ -44,3 +64,16 @@ def get_review_batch(
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
     return {"id": str(batch.id), "status": batch.status}
+
+
+@app.post("/reviews/analyze", dependencies=[Depends(get_current_tenant)])
+def analyze_reviews(body: AnalyzeRequest, analyzer: AnalyzerDep) -> AnalyzeResponse:
+    """Analyze the sentiment of up to 100 reviews. Needs credentials, nothing is stored yet."""
+    results = analyzer.analyze(body.reviews)
+    return AnalyzeResponse(
+        model_version=analyzer.model_version,
+        results=[
+            ReviewResult(index=i, label=result.label, score=result.score)
+            for i, result in enumerate(results)
+        ],
+    )
