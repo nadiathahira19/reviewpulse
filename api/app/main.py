@@ -11,6 +11,7 @@ from app.analyzer import SentimentAnalyzer, get_analyzer
 from app.db import get_session
 from app.logging_config import configure_logging
 from app.repositories import (
+    count_predictions,
     count_reviews,
     create_batch_with_reviews,
     get_batch,
@@ -95,6 +96,7 @@ def get_review_batch(
         "id": str(batch.id),
         "status": batch.status,
         "review_count": count_reviews(session, current.tenant_id, batch.id),
+        "analyzed_count": count_predictions(session, current.tenant_id, batch.id),
     }
 
 
