@@ -115,7 +115,7 @@ wrong, and how I checked it.
   passed.
 - **Time spent:** not tracked
 
-## 2026-10-23: A leftover MODEL_NAME made a test fail
+## 2026-10-23: A leftover MODEL_NAME made a test fail, and the planned fix was never committed
 
 - **Task given to the assistant:** connect a real IndoBERT sentiment model to
   `/reviews/analyze`, selected with the `MODEL_NAME` environment variable.
@@ -125,10 +125,20 @@ wrong, and how I checked it.
 - **What went wrong:** the variable was still set in the same PowerShell session,
   so the app loaded the real model during the tests. I checked this with
   `echo $env:MODEL_NAME`, which printed the model name. I did not read the
-  failure message itself, so the explanation rests on that check.
-- **How I fixed and checked it:** unset the variable and added `api/tests/conftest.py`
-  with a fixture that removes `MODEL_NAME` and clears the analyzer cache before
-  every test. After that, all tests passed (46 passed, 1 skipped locally).
+  failure message itself, so the explanation rests on that check. The planned fix
+  was a `api/tests/conftest.py` fixture that removes `MODEL_NAME` before every
+  test. The pull request description and this log said it was added, but on
+  2026-10-29 `git ls-files` showed the file was never committed. Most likely the
+  `git add` for that file failed because the file did not exist yet, and neither
+  of us noticed. CI stayed green because CI never sets `MODEL_NAME`, so nothing
+  caught it. I found it while applying the batch upload changes, which needed
+  that file.
+- **How I fixed and checked it:** on 2026-10-23 I unset the variable with
+  `Remove-Item Env:MODEL_NAME` and all tests passed again (46 passed, 1 skipped
+  locally). On 2026-10-29 I created `api/tests/conftest.py` with the fixture and
+  checked with `git ls-files` and `git status` that the file is tracked. From now
+  on I check that every file I mean to commit shows up in `git status` before I
+  commit.
 - **Time spent:** not tracked
 
 ## 2026-10-23: A deprecation warning I have not verified
@@ -170,6 +180,8 @@ wrong, and how I checked it.
     Postgres.
   - There is no login endpoint yet, so tokens cannot be issued by the API.
   - The deprecation warning above is not resolved.
+  - The `conftest.py` that blocks the real model in tests was missing until
+    2026-10-29 (see the entry above).
 - **How I checked it:** CI results above, the real model run on my laptop, and
   one real JSON log line from the running server.
 - **Time spent:** not tracked
