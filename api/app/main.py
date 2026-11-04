@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.analyzer import SentimentAnalyzer, get_analyzer
 from app.db import get_session
+from app.job_queue import JobQueue, QueueUnavailable, get_job_queue
 from app.logging_config import configure_logging
 from app.repositories import (
     count_predictions,
@@ -16,6 +17,7 @@ from app.repositories import (
     create_batch_with_reviews,
     get_batch,
     list_batches,
+    set_batch_status,
 )
 from app.request_logging import request_logging_middleware
 from app.tenancy import CurrentTenant, get_current_tenant
@@ -27,6 +29,7 @@ app.middleware("http")(request_logging_middleware)
 TenantDep = Annotated[CurrentTenant, Depends(get_current_tenant)]
 SessionDep = Annotated[Session, Depends(get_session)]
 AnalyzerDep = Annotated[SentimentAnalyzer, Depends(get_analyzer)]
+QueueDep = Annotated[JobQueue, Depends(get_job_queue)]
 
 ReviewText = Annotated[str, Field(min_length=1, max_length=2000)]
 
@@ -70,10 +73,22 @@ def me(current: TenantDep) -> dict[str, str]:
 
 @app.post("/batches", status_code=201)
 def create_review_batch(
-    body: BatchCreateRequest, current: TenantDep, session: SessionDep
+    body: BatchCreateRequest,
+    current: TenantDep,
+    session: SessionDep,
+    queue: QueueDep,
 ) -> BatchCreated:
-    """Upload up to 1000 reviews as one batch of the current tenant."""
+    """Upload up to 1000 reviews as one batch and queue its analysis."""
     batch = create_batch_with_reviews(session, current.tenant_id, body.reviews)
+    try:
+        queue.enqueue_batch_analysis(current.tenant_id, batch.id)
+    except QueueUnavailable as error:
+        # The batch is saved, but nobody will analyze it. Do not leave it as pending.
+        set_batch_status(session, current.tenant_id, batch.id, "failed")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Batch {batch.id} was saved but could not be queued",
+        ) from error
     return BatchCreated(id=str(batch.id), status=batch.status, review_count=len(body.reviews))
 
 
