@@ -3,7 +3,7 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: reviewpulse
-      POSTGRES_PASSWORD: reviewpulse  # pragma: allowlist secret
+      POSTGRES_PASSWORD: reviewpulse # pragma: allowlist secret
       POSTGRES_DB: reviewpulse
     ports:
       - "5432:5432"
@@ -12,7 +12,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U reviewpulse -d reviewpulse"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 10
 
   redis:
@@ -22,8 +22,35 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 10
+
+  worker:
+    build:
+      context: .
+      args:
+        INSTALL_ML: "false"
+    # SimpleWorker runs jobs in the same process, so the model is loaded only once.
+    command:
+      [
+        "rq", "worker", "reviews",
+        "--url", "redis://redis:6379/0",
+        "--worker-class", "rq.SimpleWorker",
+      ]
+    environment:
+      DATABASE_URL: postgresql+psycopg://reviewpulse:reviewpulse@db:5432/reviewpulse # pragma: allowlist secret
+      REDIS_URL: redis://redis:6379/0
+      MODEL_NAME: ${MODEL_NAME:-}
+      HF_HOME: /home/appuser/.cache/huggingface
+    volumes:
+      - hfcache:/home/appuser/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:
+  hfcache:
