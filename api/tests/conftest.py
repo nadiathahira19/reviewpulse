@@ -13,11 +13,22 @@ from sqlalchemy.pool import StaticPool
 from app.analyzer import get_analyzer
 from app.config import get_signing_key
 from app.db import get_session
+from app.job_queue import get_job_queue
 from app.main import app
 from app.models import Base, Tenant
 from app.security import create_access_token
 
 SIGNING_KEY = "unit-test-signing-key-0123456789abcdef"  # pragma: allowlist secret
+
+
+class FakeJobQueue:
+    """Records the jobs instead of sending them to Redis."""
+
+    def __init__(self, jobs: list[tuple[uuid.UUID, uuid.UUID]]) -> None:
+        self._jobs = jobs
+
+    def enqueue_batch_analysis(self, tenant_id: uuid.UUID, batch_id: uuid.UUID) -> None:
+        self._jobs.append((tenant_id, batch_id))
 
 
 @pytest.fixture(autouse=True)
@@ -44,9 +55,18 @@ def session() -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(session: Session) -> Iterator[TestClient]:
+def enqueued_jobs() -> list[tuple[uuid.UUID, uuid.UUID]]:
+    """The (tenant_id, batch_id) of every job that was put in the fake queue."""
+    return []
+
+
+@pytest.fixture
+def client(
+    session: Session, enqueued_jobs: list[tuple[uuid.UUID, uuid.UUID]]
+) -> Iterator[TestClient]:
     app.dependency_overrides[get_session] = lambda: session
     app.dependency_overrides[get_signing_key] = lambda: SIGNING_KEY
+    app.dependency_overrides[get_job_queue] = lambda: FakeJobQueue(enqueued_jobs)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
