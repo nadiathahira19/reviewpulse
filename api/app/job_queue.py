@@ -8,7 +8,7 @@ from typing import Protocol
 from fastapi import HTTPException
 from redis import Redis
 from redis.exceptions import RedisError
-from rq import Queue
+from rq import Queue, Retry
 
 from app.jobs import run_analyze_batch
 
@@ -16,6 +16,10 @@ QUEUE_NAME = "reviews"
 # A big batch on a CPU can take many minutes. This is a first guess.
 # It is checked later in the benchmark task.
 JOB_TIMEOUT_SECONDS = 1800
+# A job that fails (for example Postgres is restarting) is tried again after
+# 10 s, 30 s and 60 s. After the last try it stays in RQ's failed registry.
+RETRY_MAX = 3
+RETRY_INTERVALS_SECONDS = [10, 30, 60]
 
 
 class QueueUnavailable(Exception):
@@ -46,6 +50,7 @@ class RqJobQueue:
                 str(tenant_id),
                 str(batch_id),
                 job_timeout=JOB_TIMEOUT_SECONDS,
+                retry=Retry(max=RETRY_MAX, interval=RETRY_INTERVALS_SECONDS),
             )
         except RedisError as error:
             raise QueueUnavailable("Could not reach Redis") from error

@@ -31,11 +31,13 @@ services:
       args:
         INSTALL_ML: "false"
     # SimpleWorker runs jobs in the same process, so the model is loaded only once.
+    # --with-scheduler is needed so the waiting time between retries works.
     command:
       [
         "rq", "worker", "reviews",
         "--url", "redis://redis:6379/0",
         "--worker-class", "rq.SimpleWorker",
+        "--with-scheduler",
       ]
     environment:
       DATABASE_URL: postgresql+psycopg://reviewpulse:reviewpulse@db:5432/reviewpulse # pragma: allowlist secret

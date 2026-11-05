@@ -4,6 +4,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi import HTTPException
 from redis.exceptions import ConnectionError as RedisConnectionError
+from rq import Retry
 
 import app.job_queue as job_queue_module
 from app.job_queue import (
@@ -54,13 +55,17 @@ def test_redis_url_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
         get_redis_url()
 
 
-def test_job_is_enqueued_with_text_arguments_and_a_timeout() -> None:
+def test_job_is_enqueued_with_text_arguments_a_timeout_and_retries() -> None:
     tenant_id, batch_id = uuid.uuid4(), uuid.uuid4()
     RqJobQueue(REDIS_URL).enqueue_batch_analysis(tenant_id, batch_id)
     func, args, kwargs = FakeRqQueue.calls[0]
     assert func is run_analyze_batch
     assert args == (str(tenant_id), str(batch_id))
-    assert kwargs == {"job_timeout": job_queue_module.JOB_TIMEOUT_SECONDS}
+    assert kwargs["job_timeout"] == job_queue_module.JOB_TIMEOUT_SECONDS
+    retry = kwargs["retry"]
+    assert isinstance(retry, Retry)
+    assert retry.max == job_queue_module.RETRY_MAX
+    assert retry.intervals == job_queue_module.RETRY_INTERVALS_SECONDS
 
 
 def test_a_redis_error_becomes_queue_unavailable() -> None:
